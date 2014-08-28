@@ -196,8 +196,7 @@ namespace Monolith
                 }
 
                 var typeDef = new TypeDefinition(assembly.Name.Name, srcType.Name, srcType.Attributes);
-                assembly.MainModule.Types.Add(typeDef.Resolve());
-
+                assembly.MainModule.Types.Insert(0, typeDef.Resolve());
 
                 foreach (var method in srcType.Methods)
                 {

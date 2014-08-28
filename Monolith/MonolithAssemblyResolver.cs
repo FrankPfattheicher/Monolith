@@ -1,8 +1,8 @@
-﻿using System;
-using System.Reflection;
-
-namespace Monolith
+﻿namespace Monolith
 {
+    using System;
+    using System.Reflection;
+
     public static class MonolithAssemblyResolver
     {
         static MonolithAssemblyResolver()
@@ -16,10 +16,6 @@ namespace Monolith
             var assemblyName = assembly.GetName();
 
             var name = assemblyName.Name + "." + args.Name.Split(new[] { ',' })[0] + ".dll";
-            //var resNames = assembly.GetManifestResourceNames();
-            //var resName = resNames.FirstOrDefault(n => n == name);
-            //if (resName == null)
-            //  return null;
 
             using (var stream = assembly.GetManifestResourceStream(name))
             {
