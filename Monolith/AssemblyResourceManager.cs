@@ -126,61 +126,70 @@ namespace Monolith
             return true;
         }
 
-        private void CopyMethod(MethodDefinition templateMethod, TypeDefinition targetType)
+        private static MethodDefinition CopyMethod(MethodDefinition templateMethod, TypeDefinition targetType, object optParam)
         {
             var targetModule = targetType.Module;
 
             var newMethod = new MethodDefinition(templateMethod.Name, templateMethod.Attributes, targetModule.Import(templateMethod.ReturnType));
             targetType.Methods.Add(newMethod);
 
-            foreach (var variableDefinition in templateMethod.Body.Variables)
-            {
-                newMethod.Body.Variables.Add(new VariableDefinition(targetModule.Import(variableDefinition.VariableType)));
-
-
-            }
             foreach (var parameterDefinition in templateMethod.Parameters)
             {
                 newMethod.Parameters.Add(new ParameterDefinition(targetModule.Import(parameterDefinition.ParameterType)));
             }
-            foreach (var instruction in templateMethod.Body.Instructions)
+
+            if (templateMethod.Body != null)
             {
-                var constructorInfo = typeof(Instruction).GetConstructor(BindingFlags.NonPublic | BindingFlags.Instance, null, 
-                    new[] { typeof(OpCode), typeof(object) }, null);
-                var newInstruction = (Instruction)constructorInfo.Invoke(new[] { instruction.OpCode, instruction.Operand});
-                var fieldDefinition = newInstruction.Operand as FieldDefinition;
-                if (fieldDefinition != null)
+                foreach (var variableDefinition in templateMethod.Body.Variables)
                 {
-                    targetModule.Import(fieldDefinition.FieldType);
-                    newInstruction.Operand = targetType.Fields.FirstOrDefault(x => x.Name == fieldDefinition.Name);
-                    if(newInstruction.Operand == null)
-                        continue;
+                    newMethod.Body.Variables.Add(new VariableDefinition(targetModule.Import(variableDefinition.VariableType)));
                 }
-
-                if (newInstruction.Operand is MethodReference)
+                foreach (var instruction in templateMethod.Body.Instructions)
                 {
-                    //Try really hard to import type
-                    var methodReference = targetModule.Import((MethodReference)newInstruction.Operand);
-                    if ((methodReference.DeclaringType != null) && (methodReference.DeclaringType.DeclaringType != null))
+                    var constructorInfo = typeof(Instruction).GetConstructor(BindingFlags.NonPublic | BindingFlags.Instance, null,
+                        new[] { typeof(OpCode), typeof(object) }, null);
+                    var newInstruction = (Instruction)constructorInfo.Invoke(new[] { instruction.OpCode, instruction.Operand });
+                    var fieldDefinition = newInstruction.Operand as FieldDefinition;
+                    if (fieldDefinition != null)
                     {
-                        methodReference.DeclaringType.DeclaringType = targetType;
+                        targetModule.Import(fieldDefinition.FieldType);
+                        newInstruction.Operand = targetType.Fields.FirstOrDefault(x => x.Name == fieldDefinition.Name);
+                        if (newInstruction.Operand == null)
+                            continue;
                     }
 
-                    newInstruction.Operand = methodReference;
-
-                    if (!methodReference.MethodReturnType.ReturnType.IsGenericParameter)
+                    if (newInstruction.Operand is MethodReference)
                     {
-                        targetModule.Import(methodReference.MethodReturnType.ReturnType);
+                        //Try really hard to import type
+                        var methodRef = (MethodReference) newInstruction.Operand;
+                        if (methodRef.DeclaringType == templateMethod.DeclaringType)
+                        {
+                            methodRef = (MethodReference)optParam;
+                        }
+                        var methodReference = targetModule.Import(methodRef);
+                        if ((methodReference.DeclaringType != null) && (methodReference.DeclaringType.DeclaringType != null))
+                        {
+                            methodReference.DeclaringType.DeclaringType = targetType;
+                        }
+
+                        newInstruction.Operand = methodReference;
+
+                        if (!methodReference.MethodReturnType.ReturnType.IsGenericParameter)
+                        {
+                            targetModule.Import(methodReference.MethodReturnType.ReturnType.Resolve());
+                        }
+                        targetModule.Import(methodReference.DeclaringType);
+
                     }
-                    targetModule.Import(methodReference.DeclaringType);
-                    
+                    if (newInstruction.Operand is TypeReference)
+                    {
+                        newInstruction.Operand = targetModule.Import(newInstruction.Operand as TypeReference);
+                    }
+                    newMethod.Body.Instructions.Add(newInstruction);
                 }
-                if (newInstruction.Operand is TypeReference)
-                {
-                    newInstruction.Operand = targetModule.Import(newInstruction.Operand as TypeReference);
-                }
-                newMethod.Body.Instructions.Add(newInstruction);
             }
+
+            return newMethod;
         }
 
         public bool AddAssemblyResolver()
@@ -198,10 +207,27 @@ namespace Monolith
                 var typeDef = new TypeDefinition(assembly.Name.Name, srcType.Name, srcType.Attributes);
                 assembly.MainModule.Types.Insert(0, typeDef.Resolve());
 
-                foreach (var method in srcType.Methods)
+                var debugMethod = srcType.Methods.FirstOrDefault(m => m.Name == "OutputDebugString");
+                var resolveMethod = srcType.Methods.FirstOrDefault(m => m.Name == "CurrentDomainOnAssemblyResolve");
+                var initMethod = srcType.Methods.FirstOrDefault(m => m.Name == "Init");
+
+                if ((initMethod == null) || (resolveMethod == null))
                 {
-                    CopyMethod(method, typeDef);
+                    return false;
                 }
+
+                MethodDefinition dm = null;
+                if (debugMethod != null)
+                {
+                    dm = CopyMethod(debugMethod, typeDef, null);
+                }
+                var rm = CopyMethod(resolveMethod, typeDef, dm);
+                var im = CopyMethod(initMethod, typeDef, rm);
+
+                var ilProcessor = assembly.MainModule.EntryPoint.Body.GetILProcessor();
+                assembly.MainModule.EntryPoint.Body.Instructions.Insert(0, ilProcessor.Create(OpCodes.Nop));
+                assembly.MainModule.EntryPoint.Body.Instructions.Insert(1, ilProcessor.Create(OpCodes.Call, im));
+
                 assembly.Write(FileName);
                 return true;
             }

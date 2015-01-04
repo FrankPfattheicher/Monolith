@@ -14,8 +14,6 @@ namespace Monolith
 
         public static Assembly CurrentDomainOnAssemblyResolve(object sender, ResolveEventArgs args)
         {
-            Debugger.Break();
-
             //MessageBox.Show("private static Assembly CurrentDomainOnAssemblyResolve(object sender, ResolveEventArgs args)");
             OutputDebugString("private static Assembly CurrentDomainOnAssemblyResolve(object sender, ResolveEventArgs args)");
 
