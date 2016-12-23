@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Windows;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 
@@ -224,9 +225,20 @@ namespace Monolith
                 var rm = CopyMethod(resolveMethod, typeDef, dm);
                 var im = CopyMethod(initMethod, typeDef, rm);
 
-                var ilProcessor = assembly.MainModule.EntryPoint.Body.GetILProcessor();
-                assembly.MainModule.EntryPoint.Body.Instructions.Insert(0, ilProcessor.Create(OpCodes.Nop));
-                assembly.MainModule.EntryPoint.Body.Instructions.Insert(1, ilProcessor.Create(OpCodes.Call, im));
+                //var ilProcessor = assembly.MainModule.EntryPoint.Body.GetILProcessor();
+                //assembly.MainModule.EntryPoint.Body.Instructions.Insert(0, ilProcessor.Create(OpCodes.Nop));
+                //assembly.MainModule.EntryPoint.Body.Instructions.Insert(1, ilProcessor.Create(OpCodes.Call, im));
+
+                assembly.MainModule.Import(typeDef.Resolve());
+
+                var ilProcessor =  im.Body.GetILProcessor();
+                var ret = im.Body.Instructions.First(op => op.OpCode == OpCodes.Ret);
+                var ix = im.Body.Instructions.IndexOf(ret);
+
+                im.Body.Instructions.Insert(ix++, ilProcessor.Create(OpCodes.Nop));
+                im.Body.Instructions.Insert(ix, ilProcessor.Create(OpCodes.Call, assembly.EntryPoint));
+                
+                assembly.EntryPoint = im;
 
                 assembly.Write(FileName);
                 return true;
@@ -234,6 +246,7 @@ namespace Monolith
             catch (Exception ex)
             {
                 Debug.WriteLine(ex.Message);
+                MessageBox.Show(ex.Message);
             }
             return false;
         }

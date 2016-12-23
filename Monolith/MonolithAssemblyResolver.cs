@@ -12,6 +12,8 @@ namespace Monolith
         [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
         public static extern void OutputDebugString(string lpOutputString);
 
+        public static MethodInfo EntryPoint;
+
         public static Assembly CurrentDomainOnAssemblyResolve(object sender, ResolveEventArgs args)
         {
             Debugger.Break();
@@ -37,11 +39,15 @@ namespace Monolith
             }
         }
 
-        public static void Init()
+        public static void Init(string[] args)
         {
             //OutputDebugString("static void MonolithAssemblyResolver.Init()");
             MessageBox.Show("static void MonolithAssemblyResolver.Init()");
             AppDomain.CurrentDomain.AssemblyResolve += CurrentDomainOnAssemblyResolve;
+
+            //var entryArgs = new object[args.Length];
+            //Array.Copy(args, entryArgs, args.Length);
+            //EntryPoint?.Invoke(null, entryArgs);
         }
 
     }
